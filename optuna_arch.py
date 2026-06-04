@@ -44,7 +44,7 @@ CONFIG = {
     "fixed_eval_batch_size": 8,
 
     # 👤 EIXO DO MEMBRO 4: CONFIGURAÇÕES ESTRUTURAIS AUTOMATIZADAS
-    "use_custom_architecture": True,  # 👈 ALTERADO: Forçado True para usar a variação estrutural
+    "use_custom_architecture": True,  
     "arch_pooling_strategy": "mean", 
     "arch_freeze_layers": 6,         
     "arch_dropout_rate": 0.3,        
@@ -60,7 +60,6 @@ LABEL_MAP = {"Esquerda": 0, "Direita": 1, "Neutro": 2}
 # 🎛️ ESPAÇO DE BUSCA EXCLUSIVO DA ARQUITETURA (EIXO MEMBRO 4)
 # =====================================================================
 def my_hp_space(trial):
-    # O Optuna agora varia apenas os parâmetros da arquitetura customizada
     return {
         "arch_pooling_strategy": trial.suggest_categorical("arch_pooling_strategy", ["cls", "mean", "concat_4"]),
         "arch_freeze_layers": trial.suggest_categorical("arch_freeze_layers", [0, 6, 12]),
@@ -72,7 +71,6 @@ def my_hp_space(trial):
 # 📐 INICIALIZAÇÃO DINÂMICA DO MODELO (EIXO MEMBRO 4)
 # =====================================================================
 def model_init():
-    # Os parâmetros já são injetados dinamicamente no CONFIG no início do trial
     if CONFIG["use_custom_architecture"]:
         return CustomBERTimbauClassifier(CONFIG["model_name"], num_labels=3)
     else:
@@ -170,9 +168,21 @@ def compute_metrics(p: EvalPrediction):
     return {"macro_f1": f1_score(labels, preds, average='macro'), "accuracy": accuracy_score(labels, preds)}
 
 # =====================================================================
-# 🏃‍♂️ PIPELINE PRINCIPAL 
+# 🏃‍♂️ PIPELINE PRINCIPAL (OTIMIZADO PARA ACELERAÇÃO POR GPU)
 # =====================================================================
 def main():
+    # 🖥️ VERIFICAÇÃO E RELATÓRIO DE HARDWARE LOCAL
+    print("\n🖥️  Verificando Hardware de Execução...")
+    if torch.cuda.is_available():
+        gpu_name = torch.cuda.get_device_name(0)
+        print(f"🚀 SUCESSO: GPU NVIDIA Detectada! O script usará a placa: {gpu_name}")
+        use_gpu_optimization = True
+    else:
+        print("⚠️  AVISO: Nenhuma GPU NVIDIA (CUDA) detectada pelo PyTorch.")
+        print("❌ O script rodará na CPU e a busca por arquitetura será EXTREMAMENTE demorada.")
+        print("👉 Dica: Peça para seu amigo reinstalar o PyTorch utilizando a flag do índice CUDA (pip install torch --index-url https://download.pytorch.org/whl/cu121).\n")
+        use_gpu_optimization = False
+
     print("🌐 Carregando dados públicos do GitHub...")
     try:
         df_train = pd.read_csv(CONFIG["url_train"])
@@ -197,13 +207,11 @@ def main():
 
     # 🛠️ FUNÇÃO OBJETIVO INTERNA 
     def objective(trial):
-        # 1. Captura as decisões estruturais do Optuna e atualiza o CONFIG global
         arch_params = my_hp_space(trial)
         for param_name, param_value in arch_params.items():
             if param_name in CONFIG:
                 CONFIG[param_name] = param_value  
 
-        # 2. Instancia os argumentos usando os hiperparâmetros que foram FIXADOS
         local_training_args = TrainingArguments(
             output_dir="./results",
             num_train_epochs=3, 
@@ -215,10 +223,12 @@ def main():
             metric_for_best_model="macro_f1",
             greater_is_better=True,
             report_to="mlflow",
-            learning_rate=CONFIG["fixed_learning_rate"],           # 👈 FIXADO
-            weight_decay=CONFIG["fixed_weight_decay"],             # 👈 FIXADO
-            per_device_train_batch_size=CONFIG["fixed_train_batch_size"], # 👈 FIXADO
-            per_device_eval_batch_size=CONFIG["fixed_eval_batch_size"]    # 👈 FIXADO
+            learning_rate=CONFIG["fixed_learning_rate"],           
+            weight_decay=CONFIG["fixed_weight_decay"],             
+            per_device_train_batch_size=CONFIG["fixed_train_batch_size"], 
+            per_device_eval_batch_size=CONFIG["fixed_eval_batch_size"],
+            fp16=use_gpu_optimization,                     # 👈 LIGA PRECISÃO MISTA (16-bits) NA GPU
+            dataloader_pin_memory=use_gpu_optimization,    # 👈 OTIMIZA ENVIO DA RAM -> VRAM
         )
 
         local_trainer = CustomLossTrainer(
@@ -237,9 +247,7 @@ def main():
                 tags={"mlflow.parentRunId": parent_run_id},
                 nested=True
             ):
-                # Registra os parâmetros da arquitetura testados neste trial
                 mlflow.log_params(arch_params)
-                # Opcional: Documenta no trial quais foram os hiperparâmetros fixos usados nele
                 mlflow.log_params({
                     "fixed_lr": CONFIG["fixed_learning_rate"],
                     "fixed_wd": CONFIG["fixed_weight_decay"]
@@ -276,14 +284,13 @@ def main():
     # =====================================================================
     print("\n🏋️ Iniciando o treinamento final definitivo...")
     
-    # Seta a melhor arquitetura encontrada no CONFIG global antes de buildar o modelo final
     for param_name, param_value in best_trial.params.items():
         if param_name in CONFIG:
             CONFIG[param_name] = param_value  
 
     final_training_args = TrainingArguments(
         output_dir="./results",
-        num_train_epochs=6, # Convergência total
+        num_train_epochs=6, 
         logging_dir="./logs",
         logging_steps=20,
         eval_strategy="epoch",
@@ -295,7 +302,9 @@ def main():
         learning_rate=CONFIG["fixed_learning_rate"],
         weight_decay=CONFIG["fixed_weight_decay"],
         per_device_train_batch_size=CONFIG["fixed_train_batch_size"],
-        per_device_eval_batch_size=CONFIG["fixed_eval_batch_size"]
+        per_device_eval_batch_size=CONFIG["fixed_eval_batch_size"],
+        fp16=use_gpu_optimization,                  # 👈 Aceleração no modelo final
+        dataloader_pin_memory=use_gpu_optimization   # 👈 Otimização de dados no modelo final
     )
 
     final_trainer = CustomLossTrainer(
@@ -341,4 +350,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
