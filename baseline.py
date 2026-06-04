@@ -59,20 +59,23 @@ if os.getenv("MLFLOW_TRACKING_URI"):
     mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI"))
     mlflow.set_experiment("bertimbau-political-bias")
     
-    # 💡 SOLUÇÃO 1: Nome dinâmico baseado nas escolhas do membro
-    # Exemplo de saída: "bruno-mean-fr6-dr0.3" ou "mateus-cls-fr0-dr0.0"
     user_name = getpass.getuser()
+    
+    # 💡 DETECTOR AUTOMÁTICO DE MODELO: Identifica se é 'large' ou 'base' na string do link
+    tipo_modelo = "large" if "large" in CONFIG["model_name"].lower() else "base"
+    
+    # Nome dinâmico baseado no Modelo + Arquitetura Escolhida
     if CONFIG["use_custom_architecture"]:
-        descritivo_arquitetura = f"{CONFIG['arch_pooling_strategy']}-fr{CONFIG['arch_freeze_layers']}-dr{CONFIG['arch_dropout_rate']}"
+        descritivo_arquitetura = f"{tipo_modelo}-{CONFIG['arch_pooling_strategy']}-fr{CONFIG['arch_freeze_layers']}-dr{CONFIG['arch_dropout_rate']}"
     else:
-        descritivo_arquitetura = "baseline-padrao"
+        descritivo_arquitetura = f"{tipo_modelo}-baseline-padrao"
         
     nome_da_run = f"{user_name}-{descritivo_arquitetura}"
     
     # Inicia a run com o nome inteligente
     active_run = mlflow.start_run(run_name=nome_da_run)
     
-    # 💡 SOLUÇÃO 2: Registrar o CONFIG como PARÂMETROS (Viram colunas na UI)
+    # Registrar o CONFIG como PARÂMETROS (Viram colunas na UI)
     mlflow.log_params(CONFIG)
     
     # Mantém as tags auxiliares
