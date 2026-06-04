@@ -8,7 +8,9 @@ import seaborn as sns
 from torch.utils.data import Dataset
 from dotenv import load_dotenv
 import mlflow
-import optuna  
+import optuna
+# import transformers
+# transformers.utils.import_utils.check_torch_load_is_safe = lambda: True  
 from transformers import (
     AutoTokenizer, 
     AutoModelForSequenceClassification, 
