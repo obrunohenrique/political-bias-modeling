@@ -49,7 +49,7 @@ CONFIG = {
     "arch_dropout_rate": 0.3,        # Força da regularização contra overfitting
 
     # 👤 MEMBRO 5: Função de Custo Calibrada (Mitigação de Falsos Neutros)
-    "use_custom_loss": False,         # Altere para True para injetar pesos na Loss Function (CrossEntropy)
+    "use_custom_loss": True,         # Altere para True para injetar pesos na Loss Function (CrossEntropy)
 }
 
 # =====================================================================
@@ -70,7 +70,7 @@ if os.getenv("MLFLOW_TRACKING_URI"):
     else:
         descritivo_arquitetura = f"{tipo_modelo}-baseline-padrao"
         
-    nome_da_run = f"{user_name}-{descritivo_arquitetura}"
+    nome_da_run = f"{user_name}-with-custom-loss"
     
     # Inicia a run com o nome inteligente
     active_run = mlflow.start_run(run_name=nome_da_run)
